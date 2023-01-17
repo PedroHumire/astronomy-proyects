@@ -1,0 +1,155 @@
+import pylab as pl
+import numpy as np
+from astropy.visualization import quantity_support
+from astropy import units as u
+from astropy import wcs
+from astropy.utils import data
+from spectral_cube import SpectralCube
+from pvextractor import extract_pv_slice, Path
+from astropy.coordinates import SkyCoord
+from coordconverter import * #Pedro K. Humire #to get HMS2deg and deg2HMS functions.
+b5 = HMS2deg(ra='00 47 32.8',dec='-25 17 22.0')
+pb2 = HMS2deg(ra='00 47 32.648',dec='-25 17 17.69') #position of the bubble from new high-res. data of Nanase (ALCHEMI high-res.)
+pb3 = HMS2deg(ra='00 47 32.858',dec='-25 17 21.38')
+"""
+Code to extract a pv diagram. From https://learn.astropy.org/tutorials/PVDiagramPlotting.html
+"""
+
+pl.rcParams['figure.facecolor']='w'
+
+### Generate subcube: #####
+
+sc=3.0
+
+fn = data.get_pkg_data_filename('ngc253.B6b.cent.12m7m.230300.contsub.cv0_4.cube_sc'+str(sc)+'_.fits')
+cube = SpectralCube.read(fn)
+cube = cube.with_spectral_unit(u.km/u.s, velocity_convention='radio', rest_value=230.338*u.GHz)  
+sub_cube = cube.spectral_slab(0.0 * u.km / u.s, 100.0 * u.km / u.s)  
+hdu = sub_cube.hdu
+hdu.writeto('CO32_subcube.fits', overwrite=True)
+
+##########################
+
+cube = SpectralCube.read('CO32_subcube.fits')
+
+
+
+#b1 = SkyCoord('00h47m32.455s','-25d17m20.749s',frame='icrs')
+#b2 = SkyCoord('00h47m32.981s','-25d17m20.493s',frame = 'icrs')
+#b3= SkyCoord('00h47m33.585s','-25d17m15.808s',frame = 'icrs')
+
+
+#hundred_pc=HMS2deg(ra='00 00 00', dec='00 00 5.8823529411764705') #100pc (because 1" is 17pc, 100/17. = 5.88...)
+#hundred_pc=float(hundred_pc[1])
+
+#y=[b1.ra.value,b2.ra.value,b3.ra.value]
+#x=[b1.dec.value,b2.dec.value,b3.dec.value]
+
+#Big 6 bubbles together at the end of the bar:
+name='big_endbar'
+x=[1411,1510]
+y=[629,583]
+
+spacing=3
+channel=14
+#vel range: -100, +120 km/s (see above)
+
+#second/middle star/bubble (middle star of the three in the (original) channel maps):
+
+name='middle_bubble_extended'
+
+x=[1016,1083]
+y=[850,783]
+spacing=3
+
+name='middle_bubble'
+x=[1016,1054]
+y=[850,819]
+spacing=1
+
+channel=14
+#vel range: -70, +150 km/s (see above)
+
+
+#SB which is likely a region between outflows (northest one):
+name='between_outflows'
+x=[1147,1255]
+y=[940,859]
+spacing=4
+channel=15
+#vel range: -100, +150 km/s (see above)
+
+#well known stream
+name='stream'
+x=[1072,820]
+y=[678,444]
+spacing=5
+channel=8  #weird that this is 19 in QFitsView, with a total of 22 channels...
+#vel range: -100, +50 km/s (see above)
+
+
+#north stream (co-spatial with OH plume?)
+name='north_stream'
+x=[696,828]
+y=[1153,1248]
+spacing=5
+channel=6  #weird that this is 19 in QFitsView, with a total of 22 channels...
+#vel range: -150, +5 km/s (see above)
+
+#north stream (co-spatial with OH plume?)
+name='north_stream2'
+x=[853,898]
+y=[1081,1201]
+spacing=5
+channel=7  #weird that this is 19 in QFitsView, with a total of 22 channels...
+#vel range: -150, +5 km/s (see above)
+
+
+#north stream (co-spatial with OH plume?)
+name='north_stream3'
+x=[1019,1125]
+y=[936,979]
+spacing=3
+channel=7  #weird that this is 19 in QFitsView, with a total of 22 channels...
+#vel range: -0, +100 km/s (see above). According to M1 CO map
+
+
+
+#x=[11.886666666666667,11.886908333333333,11.886033333333334]
+#y=[-25.289444444444445,-25.289272222222223,-25.288247222222225]
+
+path = Path([(x[0],y[0]), (x[1],y[1])])
+
+
+#pvdiagram = extract_pv_slice(cube=cube, path=path, spacing=hundred_pc)
+pvdiagram = extract_pv_slice(cube=cube, path=path, spacing=spacing)
+
+mx = cube.max(axis=0).value  #read the entire cube
+
+pl.figure(figsize=(12,6))
+ax = pl.subplot(121, projection=cube.wcs.celestial)
+ax.imshow(cube[channel].value)  #input=mx for the entire cube, cube[10].value for a single slice
+pl.plot(x,y, color='r',linewidth=1)
+y[0],y[1]=y[0]+spacing,y[1]+spacing
+pl.plot(x,y, color='r',linewidth=1)
+y[0],y[1]=y[0]-2*spacing,y[1]-2*spacing
+pl.plot(x,y, color='r',linewidth=1)
+
+
+ww = wcs.WCS(pvdiagram.header)
+ax.set_xlabel(f"Right Ascension [{cube.wcs.wcs.radesys}]")
+ax.set_ylabel(f"Declination [{cube.wcs.wcs.radesys}]")
+
+ax = pl.subplot(122, projection=ww)
+im = ax.imshow(pvdiagram.data)
+
+ax0 = ax.coords[0]
+ax0.set_format_unit(u.arcmin)
+ax1 = ax.coords[1]
+ax1.set_format_unit(u.km/u.s)
+
+ax.set_ylabel("Velocity [km/s]")
+ax.set_xlabel("Offset [arcmin]")
+pl.savefig('pvdiagram2_sc'+str(sc)+'_'+name+'.png')
+
+pl.show()
